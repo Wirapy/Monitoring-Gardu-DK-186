@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="theme-color" content="#070d19">
+    <meta name="description"
+        content="Dashboard Monitoring Gardu Distribusi DK-186 PHB-TR 2 Feeder Berbasis IoT ESP32-S3">
+    <title>Dashboard Monitoring Gardu Distribusi DK-186 | PHB-TR 2 Feeder</title>
+
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- FontAwesome 6 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- Chart.js for Live Graphing -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Dashboard Stylesheet -->
+    <link rel="stylesheet" href="dashboard.css">
+</head>
+
+<body>
+    <div class="app-layout">
+
+        <!-- SIDEBAR (DESKTOP NAVIGATION) -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <img src="assets/pln-logo-clean.png" alt="Logo PLN" class="pln-sidebar-logo">
+                <div class="sidebar-logo-text">
+                    <h2>GARDU DK-186</h2>
+                    <p>PLN UP3 CENGKARENG</p>
+                </div>
+            </div>
+
+            <nav class="sidebar-menu">
+                <div class="sidebar-menu-category">Menu Utama</div>
+                <a href="#overview" class="menu-item active" data-view="all" onclick="selectFeederView('all')">
+                    <i class="fa-solid fa-table-cells-large"></i> Overview Gardu
+                </a>
+                <a href="#feeder-1-section" class="menu-item" data-view="f1" onclick="selectFeederView('f1')">
+                    <i class="fa-solid fa-plug"></i> Feeder 1 (Jurusan 1)
+                </a>
+                <a href="#feeder-2-section" class="menu-item" data-view="f2" onclick="selectFeederView('f2')">
+                    <i class="fa-solid fa-plug"></i> Feeder 2 (Jurusan 2)
+                </a>
+                <a href="#source-parameters-section" class="menu-item" data-view="source"
+                    onclick="selectFeederView('source')">
+                    <i class="fa-solid fa-solar-panel"></i> Sumber Energi Hybrid
+                </a>
+
+                <div class="sidebar-menu-category">Laporan & Ekspor</div>
+                <a href="javascript:void(0)" class="menu-item" onclick="openExportModal('24h')">
+                    <i class="fa-solid fa-file-excel" style="color: #10b981;"></i> Laporan Excel 24 Jam
+                </a>
+                <a href="javascript:void(0)" class="menu-item" onclick="openExportModal('timestamp')">
+                    <i class="fa-solid fa-stopwatch" style="color: #0284c7;"></i> Log Timestamp Tiap Detik
+                </a>
+
+            </nav>
+
+            <!-- Substation Metadata Specs -->
+            <div class="sidebar-substation-info">
+                <div class="substation-info-header">
+                    <h3>Spesifikasi Gardu</h3>
+                    <span class="badge-status status-normal">DK-186</span>
+                </div>
+                <div class="info-table">
+                    <span>Nama Gardu</span><strong>DK-186</strong>
+                    <span>Panel</span><strong>PHB-TR 2 Jurusan</strong>
+                    <span>Tegangan</span><strong>20 kV / 400 V</strong>
+                    <span>Trafo</span><strong>630 kVA</strong>
+                    <span>Frekuensi</span><strong>50.0 Hz</strong>
+                    <span>Mikrokontroler</span><strong>ESP32-S3</strong>
+                    <span>Protokol</span><strong>Firebase RTDB</strong>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <a href="javascript:void(0)" onclick="logoutUser()" class="btn-back-landing" title="Keluar dari sistem">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout (<span
+                        id="sbUserLabel">up3cengkareng</span>)
+                </a>
+            </div>
+        </aside>
+
+        <!-- MAIN MONITORING WRAPPER -->
+        <div class="main-wrapper">
+
+            <!-- TOP APP BAR -->
+            <header class="top-header">
+                <div class="header-title-area">
+                    <button class="mobile-nav-toggle" id="mobileNavToggle" onclick="toggleSidebar()">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <img src="assets/pln-logo-clean.png" alt="Logo PLN" class="pln-header-logo">
+                    <div class="header-title-text">
+                        <h1>Gardu Distribusi <span class="badge-substation">DK-186</span></h1>
+                        <p>PLN UP3 Cengkareng &bull; Monitoring Telemetri PHB-TR 2 Feeder</p>
+                    </div>
+                </div>
+
+                <div class="header-actions">
+                    <!-- Indikator Koneksi Real-Time ESP32-S3 -->
+                    <div class="data-source-chip connecting" id="dataSourceBadge"
+                        title="Status Koneksi Real-Time ESP32-S3">
+                        <span class="dot-indicator"></span>
+                        <span class="chip-text-full" id="dataSourceLabel">Menghubungkan ESP32-S3...</span>
+                        <span class="chip-text-short" id="dataSourceLabelShort">Koneksi...</span>
+                    </div>
+
+                    <!-- Indikator Latensi Pengiriman Data (Latency ms) -->
+                    <div class="data-source-chip latency-chip" id="latencyBadge"
+                        title="Latensi Waktu Pengiriman Data ESP32 ke Web Dashboard (ms)">
+                        <i class="fa-solid fa-bolt-lightning" style="color: #0284c7;"></i>
+                        <span class="chip-text-full">Latensi: <strong id="latencyVal" class="latency-val-fast">-- ms</strong></span>
+                        <span class="chip-text-short"><strong id="latencyValShort" class="latency-val-fast">-- ms</strong></span>
+                    </div>
+
+                    <!-- Live Time (Waktu Real-Time Dunia) -->
+                    <div class="data-source-chip" id="desktopClockWrapper"
+                        style="background: #f8fafc; color: #1e293b; border-color: #cbd5e1; font-weight: 600;"
+                        title="Waktu Real-Time Dunia (WIB)">
+                        <i class="fa-regular fa-clock" style="color: #0284c7;"></i>
+                        <span id="top-clock">--:--:-- WIB</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- DASHBOARD CONTENT BODY -->
+            <main class="dashboard-content">
+
+
+                <!-- KPI OVERVIEW CARDS (SUBSTATION LEVEL) -->
+                <div class="kpi-row" id="overview">
+                    <!-- Total Apparent Power S -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box kpi-icon-blue">
+                            <i class="fa-solid fa-bolt"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <p>Total Beban Gardu</p>
+                            <h3 id="kpi-total-kva">-- kVA</h3>
+                            <span id="kpi-total-load-pct">--% dari 630 kVA</span>
+                        </div>
+                    </div>
+
+                    <!-- Total Active Power P -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box kpi-icon-green">
+                            <i class="fa-solid fa-chart-line"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <p>Total Daya Aktif (P)</p>
+                            <h3 id="kpi-total-kw">-- kW</h3>
+                            <span id="kpi-total-energy">Energi: -- kWh</span>
+                        </div>
+                    </div>
+
+                    <!-- System Frequency -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box kpi-icon-cyan">
+                            <i class="fa-solid fa-wave-square"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <p>Frekuensi Sistem</p>
+                            <h3 id="kpi-freq">50.00 Hz</h3>
+                        </div>
+                    </div>
+
+                    <!-- Power Factor Average -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box kpi-icon-purple">
+                            <i class="fa-solid fa-gauge"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <p>Rata-rata Faktor Daya</p>
+                            <h3 id="kpi-pf">0.94</h3>
+                        </div>
+                    </div>
+
+                    <!-- Max PHB-TR Temperature -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon-box kpi-icon-amber">
+                            <i class="fa-solid fa-temperature-high"></i>
+                        </div>
+                        <div class="kpi-details">
+                            <p>Suhu Tertinggi (Trafo &amp; PHB-TR)</p>
+                            <h3 id="kpi-max-temp">-- °C</h3>
+                            <span id="kpi-temp-status" style="color: var(--text-muted); font-size: 0.72rem; font-weight: 600;">Trafo &amp; PHB-TR</span>
+                        </div>
+                    </div>
+
+
+                </div>
+
+                <!-- ========================================================
+                     MONITORING SUHU OPERASIONAL GARDU (TERPUSAT 1 SAJA)
+                     Body Trafo & NH Fuse PHB-TR (Telemetri Suhu Murni)
+                     ======================================================== -->
+                <section class="substation-temp-section" id="substation-temp-section">
+                    <!-- Hidden fallbacks for script safety -->
+                    <div style="display: none;">
+                        <span id="gardu-temp-status-badge"></span>
+                        <span id="gardu-temp-trafo-badge"></span>
+                        <span id="gardu-temp-fuse-badge"></span>
+                    </div>
+
+                    <div class="temp-section-header">
+                        <div class="temp-section-title-box">
+                            <div class="temp-section-icon">
+                                <i class="fa-solid fa-temperature-half"></i>
+                            </div>
+                            <div class="temp-section-titles">
+                                <h3>MONITORING SUHU OPERASIONAL GARDU DISTRIBUSI DK-186</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="temp-section-grid">
+                        <!-- 1. SUHU BODY TRAFO -->
+                        <div class="temp-hero-card">
+                            <div class="temp-hero-header">
+                                <div class="temp-hero-icon-box" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;">
+                                    <i class="fa-solid fa-temperature-three-quarters"></i>
+                                </div>
+                                <div class="temp-hero-info">
+                                    <div class="temp-hero-title">Suhu Body Trafo</div>
+                                </div>
+                            </div>
+                            <div class="temp-hero-body">
+                                <div class="temp-hero-value" id="gardu-val-temp-trafo">--.- °C</div>
+                            </div>
+                        </div>
+
+                        <!-- 2. SUHU NH FUSE PHB-TR -->
+                        <div class="temp-hero-card">
+                            <div class="temp-hero-header">
+                                <div class="temp-hero-icon-box" style="background: rgba(245, 158, 11, 0.12); color: #f59e0b;">
+                                    <i class="fa-solid fa-temperature-half"></i>
+                                </div>
+                                <div class="temp-hero-info">
+                                    <div class="temp-hero-title">Suhu NH Fuse PHB-TR</div>
+                                </div>
+                            </div>
+                            <div class="temp-hero-body">
+                                <div class="temp-hero-value" id="gardu-val-temp-fuse">--.- °C</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- FEEDERS CONTAINER (FEEDER 1 & FEEDER 2) -->
+                <div class="feeders-container">
+
+                    <!-- ========================================================
+                         FEEDER 1 (JURUSAN 1)
+                         ======================================================== -->
+                    <section class="feeder-card" id="feeder-1-section">
+                        <!-- Feeder Header -->
+                        <div class="feeder-top-banner">
+                            <div class="feeder-title-left">
+                                <span class="feeder-tag f1-tag"><i class="fa-solid fa-plug"></i> JURUSAN 1</span>
+                                <div>
+                                    <h2>FEEDER 1 &bull; PHB-TR</h2>
+                                </div>
+                            </div>
+                            <div class="feeder-badges-right">
+                                <span class="badge-status status-normal" id="f1-status-badge">NORMAL</span>
+                            </div>
+                        </div>
+
+                        <!-- Feeder Body Grid (Parameter Kelistrikan) -->
+                        <div class="feeder-body-grid">
+
+                            <!-- Hidden fallback elements to maintain script safety -->
+                            <div style="display: none;">
+                                <span id="f1-val-temp-trafo"></span>
+                                <span id="f1-val-temp-fuse"></span>
+                                <span id="f1-temp-trafo-badge"></span>
+                                <span id="f1-temp-fuse-badge"></span>
+                                <span id="f1-gauge-circle"></span>
+                                <span id="f1-val-load-pct"></span>
+                                <span id="f1-val-kva"></span>
+                                <span id="f1-val-temp"></span>
+                                <span id="f1-temp-badge"></span>
+                            </div>
+
+                            <!-- COL 1: TEGANGAN (V) & ARUS (A) -->
+                            <div class="telemetry-panel">
+                                <div class="panel-title">
+                                    <span>Tegangan & Arus 3-Fasa</span>
+                                    <i class="fa-solid fa-bolt"></i>
+                                </div>
+
+                                <!-- PARAMETER 2: TEGANGAN FASA-NETRAL (V) -->
+                                <div
+                                    style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 600;">
+                                    TEGANGAN FASA - NETRAL (V)
+                                </div>
+                                <div class="phase-readings-grid">
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-r">R - N</div>
+                                        <div class="phase-val" id="f1-vrn">--</div>
+                                        <div class="phase-status">Volt</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-s">S - N</div>
+                                        <div class="phase-val" id="f1-vsn">--</div>
+                                        <div class="phase-status">Volt</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-t">T - N</div>
+                                        <div class="phase-val" id="f1-vtn">--</div>
+                                        <div class="phase-status">Volt</div>
+                                    </div>
+                                </div>
+
+                                <!-- TEGANGAN FASA - FASA (V) -->
+                                <div class="line-to-line-title">
+                                    TEGANGAN FASA - FASA (V)
+                                </div>
+                                <div class="line-to-line-row">
+                                    <div class="phase-block">
+                                        <div class="phase-header">R - S</div>
+                                        <div class="phase-val" id="f1-vrs">--</div>
+                                        <div class="phase-status">V</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header">S - T</div>
+                                        <div class="phase-val" id="f1-vst">--</div>
+                                        <div class="phase-status">V</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header">T - R</div>
+                                        <div class="phase-val" id="f1-vtr">--</div>
+                                        <div class="phase-status">V</div>
+                                    </div>
+                                </div>
+
+                                <!-- PARAMETER 1: ARUS (A) -->
+                                <div class="current-param-title">
+                                    ARUS KELISTRIKAN FASA (A)
+                                </div>
+                                <div class="phase-readings-grid four-cols">
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-r">FASA R</div>
+                                        <div class="phase-val" id="f1-ir">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-s">FASA S</div>
+                                        <div class="phase-val" id="f1-is">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-t">FASA T</div>
+                                        <div class="phase-val" id="f1-it">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-n">NETRAL N</div>
+                                        <div class="phase-val" id="f1-in">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- COL 2: DAYA, FAKTOR DAYA, FREKUENSI, ENERGI -->
+                            <div class="telemetry-panel">
+                                <div class="panel-title">
+                                    <span>Daya, Energi & Frekuensi</span>
+                                    <i class="fa-solid fa-chart-pie"></i>
+                                </div>
+
+                                <div class="power-metrics-grid">
+                                    <!-- PARAMETER 3: DAYA AKTIF (kW) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Daya Aktif (P)</span>
+                                        <span class="power-val" id="f1-p">-- kW</span>
+                                        <span class="power-sub">Beban Nyata</span>
+                                    </div>
+
+                                    <!-- PARAMETER 4: DAYA REAKTIF (kVAR) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Daya Reaktif (Q)</span>
+                                        <span class="power-val" id="f1-q">-- kVAR</span>
+                                        <span class="power-sub">Induktif / Kapasitif</span>
+                                    </div>
+
+                                    <!-- PARAMETER 5: DAYA SEMU (kVA) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Daya Semu (S)</span>
+                                        <span class="power-val" id="f1-s">-- kVA</span>
+                                        <span class="power-sub">Total Kapasitas</span>
+                                    </div>
+
+                                    <!-- PARAMETER 6: FAKTOR DAYA (PF) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Faktor Daya (cos &phi;)</span>
+                                        <span class="power-val" id="f1-pf">--</span>
+                                        <span class="power-sub" id="f1-pf-type">Lagging</span>
+                                    </div>
+
+                                    <!-- PARAMETER 7: FREKUENSI (Hz) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Frekuensi (f)</span>
+                                        <span class="power-val" id="f1-freq">-- Hz</span>
+                                        <span class="power-sub">Standar 50.0 Hz</span>
+                                    </div>
+
+                                    <!-- PARAMETER 8: ENERGI (kWh) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Energi Kumulatif</span>
+                                        <span class="power-val" id="f1-energy">-- kWh</span>
+                                        <span class="power-sub">Aktif Terhitung</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- COL 3: STATUS INDIKASI & ALARM (5 KONDISI ARDUINO) -->
+                            <div class="telemetry-panel">
+                                <div class="panel-title">
+                                    <span>Status Indikasi & Alarm</span>
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                </div>
+
+                                <ul class="alarm-list">
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f1-icon-ov"></i> Over
+                                            Voltage (OV)</span>
+                                        <span class="alarm-val val-ok" id="f1-alm-ov">Normal</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f1-icon-uv"></i> Under
+                                            Voltage (UV)</span>
+                                        <span class="alarm-val val-ok" id="f1-alm-uv">Normal</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f1-icon-loss"></i> Phase
+                                            Lose</span>
+                                        <span class="alarm-val val-ok" id="f1-alm-loss">Normal</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f1-icon-unb"></i>
+                                            Unbalance</span>
+                                        <span class="alarm-val val-ok" id="f1-alm-unb">2.9%</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f1-icon-rc"></i>
+                                            Reverse Current (Arus Balik)</span>
+                                        <span class="alarm-val val-ok" id="f1-alm-rc">Normal</span>
+                                    </li>
+                                </ul>
+
+                                <div
+                                    style="margin-top: 0.85rem; font-size: 0.72rem; color: var(--text-muted); text-align: center;">
+                                    Update Terakhir: <strong id="f1-last-time"
+                                        style="color: var(--text-primary);">--:--:--</strong>
+                                </div>
+                            </div>
+
+                        </div>
+                    </section>
+
+                    <!-- ========================================================
+                         FEEDER 2 (JURUSAN 2)
+                         ======================================================== -->
+                    <section class="feeder-card" id="feeder-2-section">
+                        <!-- Feeder Header -->
+                        <div class="feeder-top-banner">
+                            <div class="feeder-title-left">
+                                <span class="feeder-tag f2-tag"><i class="fa-solid fa-plug"></i> JURUSAN 2</span>
+                                <div>
+                                    <h2>FEEDER 2 &bull; PHB-TR</h2>
+                                </div>
+                            </div>
+                            <div class="feeder-badges-right">
+                                <span class="badge-status status-normal" id="f2-status-badge">NORMAL</span>
+                            </div>
+                        </div>
+
+                        <!-- Feeder Body Grid (Parameter Kelistrikan) -->
+                        <div class="feeder-body-grid">
+
+                            <!-- Hidden fallback elements to maintain script safety -->
+                            <div style="display: none;">
+                                <span id="f2-val-temp-trafo"></span>
+                                <span id="f2-val-temp-fuse"></span>
+                                <span id="f2-temp-trafo-badge"></span>
+                                <span id="f2-temp-fuse-badge"></span>
+                                <span id="f2-gauge-circle"></span>
+                                <span id="f2-val-load-pct"></span>
+                                <span id="f2-val-kva"></span>
+                                <span id="f2-val-temp"></span>
+                                <span id="f2-temp-badge"></span>
+                            </div>
+
+                            <!-- COL 1: TEGANGAN (V) & ARUS (A) -->
+                            <div class="telemetry-panel">
+                                <div class="panel-title">
+                                    <span>Tegangan & Arus 3-Fasa</span>
+                                    <i class="fa-solid fa-bolt"></i>
+                                </div>
+
+                                <!-- PARAMETER 2: TEGANGAN FASA-NETRAL (V) -->
+                                <div
+                                    style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.35rem; font-weight: 600;">
+                                    TEGANGAN FASA - NETRAL (V)
+                                </div>
+                                <div class="phase-readings-grid">
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-r">R - N</div>
+                                        <div class="phase-val" id="f2-vrn">--</div>
+                                        <div class="phase-status">Volt</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-s">S - N</div>
+                                        <div class="phase-val" id="f2-vsn">--</div>
+                                        <div class="phase-status">Volt</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-t">T - N</div>
+                                        <div class="phase-val" id="f2-vtn">--</div>
+                                        <div class="phase-status">Volt</div>
+                                    </div>
+                                </div>
+
+                                <!-- TEGANGAN FASA - FASA (V) -->
+                                <div class="line-to-line-title">
+                                    TEGANGAN FASA - FASA (V)
+                                </div>
+                                <div class="line-to-line-row">
+                                    <div class="phase-block">
+                                        <div class="phase-header">R - S</div>
+                                        <div class="phase-val" id="f2-vrs">--</div>
+                                        <div class="phase-status">V</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header">S - T</div>
+                                        <div class="phase-val" id="f2-vst">--</div>
+                                        <div class="phase-status">V</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header">T - R</div>
+                                        <div class="phase-val" id="f2-vtr">--</div>
+                                        <div class="phase-status">V</div>
+                                    </div>
+                                </div>
+
+                                <!-- PARAMETER 1: ARUS (A) -->
+                                <div class="current-param-title">
+                                    ARUS KELISTRIKAN FASA (A)
+                                </div>
+                                <div class="phase-readings-grid four-cols">
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-r">FASA R</div>
+                                        <div class="phase-val" id="f2-ir">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-s">FASA S</div>
+                                        <div class="phase-val" id="f2-is">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-t">FASA T</div>
+                                        <div class="phase-val" id="f2-it">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                    <div class="phase-block">
+                                        <div class="phase-header phase-n">NETRAL N</div>
+                                        <div class="phase-val" id="f2-in">--</div>
+                                        <div class="phase-status">Ampere</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- COL 2: DAYA, FAKTOR DAYA, FREKUENSI, ENERGI -->
+                            <div class="telemetry-panel">
+                                <div class="panel-title">
+                                    <span>Daya, Energi & Frekuensi</span>
+                                    <i class="fa-solid fa-chart-pie"></i>
+                                </div>
+
+                                <div class="power-metrics-grid">
+                                    <!-- PARAMETER 3: DAYA AKTIF (kW) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Daya Aktif (P)</span>
+                                        <span class="power-val" id="f2-p">-- kW</span>
+                                        <span class="power-sub">Beban Nyata</span>
+                                    </div>
+
+                                    <!-- PARAMETER 4: DAYA REAKTIF (kVAR) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Daya Reaktif (Q)</span>
+                                        <span class="power-val" id="f2-q">-- kVAR</span>
+                                        <span class="power-sub">Induktif / Kapasitif</span>
+                                    </div>
+
+                                    <!-- PARAMETER 5: DAYA SEMU (kVA) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Daya Semu (S)</span>
+                                        <span class="power-val" id="f2-s">-- kVA</span>
+                                        <span class="power-sub">Total Kapasitas</span>
+                                    </div>
+
+                                    <!-- PARAMETER 6: FAKTOR DAYA (PF) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Faktor Daya (cos &phi;)</span>
+                                        <span class="power-val" id="f2-pf">--</span>
+                                        <span class="power-sub" id="f2-pf-type">Lagging</span>
+                                    </div>
+
+                                    <!-- PARAMETER 7: FREKUENSI (Hz) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Frekuensi (f)</span>
+                                        <span class="power-val" id="f2-freq">-- Hz</span>
+                                        <span class="power-sub">Standar 50.0 Hz</span>
+                                    </div>
+
+                                    <!-- PARAMETER 8: ENERGI (kWh) -->
+                                    <div class="power-item">
+                                        <span class="power-label">Energi Kumulatif</span>
+                                        <span class="power-val" id="f2-energy">-- kWh</span>
+                                        <span class="power-sub">Aktif Terhitung</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- COL 3: STATUS INDIKASI & ALARM (5 KONDISI ARDUINO) -->
+                            <div class="telemetry-panel">
+                                <div class="panel-title">
+                                    <span>Status Indikasi & Alarm</span>
+                                    <i class="fa-solid fa-triangle-exclamation"></i>
+                                </div>
+
+                                <ul class="alarm-list">
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f2-icon-ov"></i> Over
+                                            Voltage (OV)</span>
+                                        <span class="alarm-val val-ok" id="f2-alm-ov">Normal</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f2-icon-uv"></i> Under
+                                            Voltage (UV)</span>
+                                        <span class="alarm-val val-ok" id="f2-alm-uv">Normal</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f2-icon-loss"></i> Phase
+                                            Lose</span>
+                                        <span class="alarm-val val-ok" id="f2-alm-loss">Normal</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f2-icon-unb"></i>
+                                            Unbalance</span>
+                                        <span class="alarm-val val-ok" id="f2-alm-unb">2.9%</span>
+                                    </li>
+                                    <li class="alarm-item">
+                                        <span class="alarm-label"><i class="fa-solid fa-circle-check val-ok" id="f2-icon-rc"></i>
+                                            Reverse Current (Arus Balik)</span>
+                                        <span class="alarm-val val-ok" id="f2-alm-rc">Normal</span>
+                                    </li>
+                                </ul>
+
+                                <div
+                                    style="margin-top: 0.85rem; font-size: 0.72rem; color: var(--text-muted); text-align: center;">
+                                    Update Terakhir: <strong id="f2-last-time"
+                                        style="color: var(--text-primary);">--:--:--</strong>
+                                </div>
+                            </div>
+
+                        </div>
+                    </section>
+
+                    <!-- ========================================================
+                         PARAMETER SUMBER (MONITORING ENERGI HYBRID - PERSIS GAMBAR 2)
+                         HANYA TAMPIL KETIKA MENU 'PARAMETER SUMBER' DIKLIK
+                         TIDAK AKAN MUNCUL DI OVERVIEW GARDU!
+                         ======================================================== -->
+                    <section class="source-section-wrapper" id="source-parameters-section" style="display: none;">
+
+                        <!-- Top Action Banner -->
+                        <div class="source-top-controls">
+                            <div class="source-control-left">
+                                <span class="source-tag"><i class="fa-solid fa-solar-panel"></i> SUMBER ENERGI
+                                    HYBRID</span>
+                                <span class="source-sub-text">PLN &bull; PLTS &bull; Baterai &bull; Inverter</span>
+                            </div>
+                            <div class="source-control-right">
+                                <span class="badge-status status-normal"><i class="fa-solid fa-circle-dot"></i> Live
+                                    Telemetri</span>
+                            </div>
+                        </div>
+
+                        <!-- TFT Display Shell Container (Persis Desain Layar TFT LCD Gambar 2) -->
+                        <div class="tft-display-outer">
+                            <div class="tft-screen-frame">
+
+                                <!-- Top Bar (Biru dengan Icon Petir Kuning & Info WiFi) -->
+                                <div class="tft-header-bar">
+                                    <div class="tft-header-left">
+                                        <div class="tft-bolt-badge">
+                                            <i class="fa-solid fa-bolt"></i>
+                                        </div>
+                                        <div class="tft-title-box">
+                                            <div class="tft-title-main">PLN &minus; PLTS &minus; BATERAI &nbsp;|&nbsp;
+                                                UP3 CENGKARENG</div>
+                                            <div class="tft-title-sub">MONITORING SUMBER ENERGI HYBRID</div>
+                                        </div>
+                                    </div>
+                                    <div class="tft-header-right">
+                                        <div class="tft-iot-tag">IoT WEB MONITORING</div>
+                                        <div class="tft-wifi-tag" id="src-wifi-label">
+                                            <span>WiFi ONLINE</span>
+                                            <i class="fa-solid fa-wifi"></i>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- 2x2 Quadrants Grid -->
+                                <div class="tft-quadrants-grid">
+
+                                    <!-- Quadrant 1: PLN (AC) -->
+                                    <div class="tft-box" id="tft-box-pln">
+                                        <div class="tft-box-header header-pln">
+                                            <div class="tft-box-title">
+                                                <span class="tft-dot dot-yellow">●</span>
+                                                <span class="tft-box-name">PLN (AC)</span>
+                                            </div>
+                                            <span class="tft-pill pill-ok" id="src-pln-badge">NORMAL</span>
+                                        </div>
+                                        <div class="tft-box-content">
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Tegangan</span>
+                                                <span class="tft-val" id="src-pln-v">220.4 V</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Arus</span>
+                                                <span class="tft-val" id="src-pln-i">5.20 A</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Daya</span>
+                                                <span class="tft-val" id="src-pln-p">1146.0 W</span>
+                                            </div>
+                                            <div class="tft-sub-row">
+                                                <span>f <strong id="src-pln-f">50.0 Hz</strong></span>
+                                                <span>PF <strong id="src-pln-pf">0.96</strong></span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Quadrant 2: INVERTER (AC) -->
+                                    <div class="tft-box" id="tft-box-inv">
+                                        <div class="tft-box-header header-inverter">
+                                            <div class="tft-box-title">
+                                                <span class="tft-dot dot-blue">○</span>
+                                                <span class="tft-box-name">INVERTER (AC)</span>
+                                            </div>
+                                            <span class="tft-pill pill-active" id="src-inv-badge">AKTIF</span>
+                                        </div>
+                                        <div class="tft-box-content">
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Tegangan</span>
+                                                <span class="tft-val" id="src-inv-v">220.0 V</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Arus</span>
+                                                <span class="tft-val" id="src-inv-i">3.15 A</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Daya</span>
+                                                <span class="tft-val" id="src-inv-p">693.0 W</span>
+                                            </div>
+                                            <div class="tft-sub-row">
+                                                <span>f <strong id="src-inv-f">50.0 Hz</strong></span>
+                                                <span>PF <strong id="src-inv-pf">0.98</strong></span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Quadrant 3: PLTS (DC) -->
+                                    <div class="tft-box" id="tft-box-plts">
+                                        <div class="tft-box-header header-plts">
+                                            <div class="tft-box-title">
+                                                <span class="tft-dot dot-cyan">●</span>
+                                                <span class="tft-box-name">PLTS (DC)</span>
+                                            </div>
+                                            <span class="tft-pill pill-charging" id="src-plts-badge">CHARGING</span>
+                                        </div>
+                                        <div class="tft-box-content">
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Tegangan</span>
+                                                <span class="tft-val" id="src-plts-v">18.50 V</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Arus</span>
+                                                <span class="tft-val" id="src-plts-i">2.850 A</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Daya</span>
+                                                <span class="tft-val" id="src-plts-p">52.72 W</span>
+                                            </div>
+                                            <div class="tft-sub-row">
+                                                <span>Panel 50 Wp</span>
+                                                <span>Output <strong id="src-plts-out">85 %</strong></span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Quadrant 4: BATERAI (DC) -->
+                                    <div class="tft-box" id="tft-box-bat">
+                                        <div class="tft-box-header header-baterai">
+                                            <div class="tft-box-title">
+                                                <span class="tft-dot dot-purple">○</span>
+                                                <span class="tft-box-name">BATERAI (DC)</span>
+                                            </div>
+                                            <span class="tft-pill pill-charging" id="src-bat-badge">CHARGING</span>
+                                        </div>
+                                        <div class="tft-box-content">
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Tegangan</span>
+                                                <span class="tft-val" id="src-bat-v">12.87 V</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Arus</span>
+                                                <span class="tft-val" id="src-bat-i">-1.548 A</span>
+                                            </div>
+                                            <div class="tft-row">
+                                                <span class="tft-lbl">Daya</span>
+                                                <span class="tft-val" id="src-bat-p">-19.91 W</span>
+                                            </div>
+                                            <div class="tft-sub-row tft-soc-container" title="Perhitungan SOC Metode Coulomb Counting (C_nom = 17 Ah)">
+                                                <span class="soc-label">SOC</span>
+                                                <div class="tft-soc-bar-shell">
+                                                    <div class="tft-soc-bar-fill" id="src-bat-soc-fill"
+                                                        style="width: 75.7%;"></div>
+                                                </div>
+                                                <span class="soc-pct" id="src-bat-soc-val">75.7 %</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                <!-- Bottom Status Bar (Persis Strip Bawah Gambar 2) -->
+                                <div class="tft-footer-bar">
+                                    <div class="tft-foot-left" id="src-footer-beban">BEBAN: NORMAL (250 W)</div>
+                                    <div class="tft-foot-center">UPTIME <span id="src-footer-uptime">--:--:--</span>
+                                    </div>
+                                    <div class="tft-foot-right">SYSTEM: <span id="src-footer-system"
+                                            class="sys-normal">NORMAL</span></div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                    </section>
+
+                </div>
+            </main>
+        </div>
+
+
+
+        <!-- DOWNLOAD REPORT / EXCEL EXPORT MODAL -->
+        <div class="modal-overlay" id="exportModal">
+            <div class="modal-dialog" style="max-width: 580px;">
+                <div class="modal-header">
+                    <h3><i class="fa-solid fa-file-excel" style="color: #10b981;"></i> Download Data &amp; Laporan Excel</h3>
+                    <button class="btn-icon" onclick="closeExportModal()"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                
+                <div class="modal-body">
+                    <!-- Segmented Tab Header di Dalam Modal -->
+                    <div class="modal-tab-header">
+                        <button class="modal-tab-btn active" id="modalTabBtn24h" onclick="switchExportModalTab('24h')">
+                            <i class="fa-solid fa-chart-line"></i> Laporan 24 Jam (+3 Grafik)
+                        </button>
+                        <button class="modal-tab-btn" id="modalTabBtnTimestamp" onclick="switchExportModalTab('timestamp')">
+                            <i class="fa-solid fa-stopwatch"></i> Log Timestamp Tiap Detik
+                        </button>
+                    </div>
+
+                    <!-- TAB 1: Laporan 24 Jam -->
+                    <div id="exportTabContent24h">
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.1rem; line-height: 1.4;">
+                            Dokumen Excel (.xlsx) menggabungkan <strong>3 Grafik Pengukuran 24 Jam</strong>,
+                            <strong>Tabel Log Parameter Kelistrikan Lengkap</strong> (Tegangan R-S-T, Arus, Daya, Cos φ,
+                            Frekuensi, dan Suhu), serta <strong>Pengujian Latensi Pengiriman Data (Latency ms &amp; Rata-rata)</strong>.
+                        </p>
+
+                        <div class="form-group">
+                            <label><i class="fa-regular fa-calendar"></i> Tanggal Pengukuran</label>
+                            <input type="date" class="form-control" id="expDate">
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="fa-solid fa-plug"></i> Pilihan Jurusan / Feeder</label>
+                            <select class="form-control" id="expFeeder">
+                                <option value="both">Semua Feeder (Feeder 1 &amp; Feeder 2 - Multi Sheet)</option>
+                                <option value="f1">Feeder 1 (PHB-TR Jurusan 1)</option>
+                                <option value="f2">Feeder 2 (PHB-TR Jurusan 2)</option>
+                            </select>
+                        </div>
+
+                        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 0.85rem; margin-top: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #10b981; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.4rem;">
+                                <i class="fa-solid fa-layer-group"></i> 3 Grafik Otomatis Disematkan Sekaligus:
+                            </div>
+                            <ul style="margin: 0; padding-left: 1.2rem; font-size: 0.78rem; color: var(--text-normal); line-height: 1.5;">
+                                <li><strong>Grafik Tegangan 3-Fasa:</strong> Kurva fasa R, S, T (24 Jam)</li>
+                                <li><strong>Grafik Arus 3-Fasa &amp; Netral:</strong> Kurva arus R, S, T, N (24 Jam)</li>
+                                <li><strong>Grafik Suhu Operasional:</strong> Suhu Trafo &amp; Suhu NH Fuse PHB-TR (24 Jam)</li>
+                            </ul>
+                            <small style="display: block; margin-top: 0.5rem; font-size: 0.72rem; color: var(--text-muted);">
+                                Ketiga grafik disusun rapi di atas tabel log parameter kelistrikan di dalam file Excel.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: Log Timestamp Tiap Detik -->
+                    <div id="exportTabContentTimestamp" style="display: none;">
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1.1rem; line-height: 1.4;">
+                            Format Excel khusus untuk monitoring dan analisis <strong>Latensi &amp; Waktu Transmisi Data</strong> (kolom <code>Timestamp</code>, <code>V1</code>, <code>A1</code>, <code>V2</code>, <code>A2</code>, <code>V3</code>, <code>A3</code>, <code>V4</code>, <code>A4</code>, <code>V5</code>, <code>A5</code>, <code>V6</code>, <code>A6</code>, <code>Temp1</code>, <code>Temp2</code>, <code>Delay (s)</code>, <code>Latency (ms)</code>). Data tercatat tiap detik sehingga terlihat jelas interval transmisi data dan latensi jaringan.
+                        </p>
+
+                        <div class="form-group">
+                            <label><i class="fa-regular fa-calendar"></i> Tanggal Pengujian</label>
+                            <input type="date" class="form-control" id="expTimestampDate">
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="fa-solid fa-list-ol"></i> Jumlah Sampel Data Detik</label>
+                            <select class="form-control" id="expTimestampCount">
+                                <option value="120">120 Data (~2 Menit)</option>
+                                <option value="200" selected>200 Data (~3.5 Menit)</option>
+                                <option value="300">300 Data (~5 Menit)</option>
+                                <option value="600">600 Data (~10 Menit)</option>
+                            </select>
+                        </div>
+
+                        <div style="background: rgba(2, 132, 199, 0.08); border: 1px solid rgba(2, 132, 199, 0.25); border-radius: 8px; padding: 0.85rem; margin-top: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #0284c7; font-weight: 700; font-size: 0.85rem; margin-bottom: 0.4rem;">
+                                <i class="fa-solid fa-table-columns"></i> Disertai 2 Sheet Lengkap:
+                            </div>
+                            <ul style="margin: 0; padding-left: 1.2rem; font-size: 0.78rem; color: var(--text-normal); line-height: 1.5;">
+                                <li><strong>Sheet 1 (Log Uji):</strong> Kolom <code>Timestam</code>, <code>V1-V6</code>, <code>A1-A6</code>, <code>Temp1-Temp2</code>, selisih <code>Delay (s)</code>, serta <code>Latency (ms)</code>.</li>
+                                <li><strong>Sheet 2 (9 Data Monitoring 2 Feeder):</strong> Seluruh 9 parameter 2 feeder (Tegangan fasa-netral, fasa-fasa, arus R-S-T-N, daya P-Q-S, Cos φ, frekuensi, suhu, dan latensi).</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="closeExportModal()">Batal</button>
+                    <!-- Tombol untuk Tab 1 -->
+                    <button class="btn-primary" id="btnDownloadExcel" onclick="executeDownloadExcel()"
+                        style="display: inline-flex; background: linear-gradient(135deg, #059669, #10b981);">
+                        <i class="fa-solid fa-download"></i>
+                        <span>Unduh Laporan 24 Jam (.xlsx)</span>
+                    </button>
+                    <!-- Tombol untuk Tab 2 -->
+                    <button class="btn-primary" id="btnDownloadTimestampExcel" onclick="executeDownloadTimestampExcel()"
+                        style="display: none; background: linear-gradient(135deg, #0284c7, #2563eb);">
+                        <i class="fa-solid fa-stopwatch"></i>
+                        <span>Unduh Log Timestamp Tiap Detik (.xlsx)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden Canvas for Rendering High-Res 24h Chart for Excel Embedding -->
+        <canvas id="exportCanvasHidden" width="960" height="400" style="display: none;"></canvas>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+
+</html>
